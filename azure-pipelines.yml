@@ -1,0 +1,35 @@
+trigger:
+- main
+
+pool:
+  vmImage: 'ubuntu-latest'
+
+steps:
+
+- task: AzureCLI@2
+  inputs:
+    azureSubscription: 'your-service-connection' # Your Azure service connection
+    scriptType: 'bash'
+    scriptLocation: 'inlineScript'
+    inlineScript: |
+      echo "Installing Terraform"
+      curl -Lo terraform.zip https://releases.hashicorp.com/terraform/$(terraformVersion)/terraform_$(terraformVersion)_linux_amd64.zip
+      unzip terraform.zip
+      sudo mv terraform /usr/local/bin/
+      terraform --version
+
+- script: |
+    echo "Logging in to Azure..."
+    az login --service-principal -u $(AZURE_CLIENT_ID) -p $(AZURE_CLIENT_SECRET) --tenant $(AZURE_TENANT_ID)
+    az group list
+  displayName: 'Azure CLI Login and Command'      
+
+- script: |
+    echo "Initializing Terraform"
+    terraform init
+  displayName: 'Terraform Init'
+
+- script: |
+    echo "Applying Terraform"
+    terraform apply -auto-approve
+  displayName: 'Terraform Apply'
