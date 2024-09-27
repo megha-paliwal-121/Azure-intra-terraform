@@ -4,11 +4,19 @@ trigger:
 pool:
   vmImage: 'ubuntu-latest'
 
+variables:
+  azureSubscription: 'your-service-connection' # Replace with your Azure service connection name
+  appName: 'your-app-service-name'             # Replace with your App Service name
+  resourceGroup: 'your-resource-group'         # Replace with your resource group name
+  buildConfiguration: 'Release'                 # Build configuration
+  terraformVersion: '1.3.0'                    # Replace with the desired Terraform version
+
 steps:
 
+# Step to install Terraform
 - task: AzureCLI@2
   inputs:
-    azureSubscription: 'your-service-connection' # Your Azure service connection
+    azureSubscription: '$(azureSubscription)' # Your Azure service connection
     scriptType: 'bash'
     scriptLocation: 'inlineScript'
     inlineScript: |
@@ -18,18 +26,49 @@ steps:
       sudo mv terraform /usr/local/bin/
       terraform --version
 
+# Step to log in to Azure
 - script: |
     echo "Logging in to Azure..."
     az login --service-principal -u $(AZURE_CLIENT_ID) -p $(AZURE_CLIENT_SECRET) --tenant $(AZURE_TENANT_ID)
     az group list
   displayName: 'Azure CLI Login and Command'      
 
+# Step to initialize Terraform
 - script: |
     echo "Initializing Terraform"
     terraform init
   displayName: 'Terraform Init'
 
+# Step to apply Terraform
 - script: |
     echo "Applying Terraform"
     terraform apply -auto-approve
   displayName: 'Terraform Apply'
+
+# Step to build the application
+- task: DotNetCoreCLI@2
+  inputs:
+    command: 'build'
+    projects: '**/*.csproj'
+    versioningScheme: 'off'
+    configuration: '$(buildConfiguration)'
+
+# Step to publish the application
+- task: DotNetCoreCLI@2
+  inputs:
+    command: 'publish'
+    projects: '**/*.csproj'
+    publishWebProjects: true
+    arguments: '--configuration $(buildConfiguration) --output $(Build.ArtifactStagingDirectory)'
+
+# Publish the artifact
+- publish: $(Build.ArtifactStagingDirectory)
+  artifact: drop
+
+# Step to deploy to Azure App Service
+- task: AzureWebApp@1
+  inputs:
+    azureSubscription: '$(azureSubscription)'  # Correctly reference the Azure service connection
+    appName: '$(appName)'                      # Correctly reference the app name
+    package: '$(Pipeline.Workspace)/drop/*.zip'  # Correctly reference the package path
+    deploymentMethod: 'zipDeploy'              # Ensure this is correctly placed
